@@ -4,18 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Logo } from "@/components/logo";
+import { UserMenu } from "@/components/user-menu";
 import { transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import type { Profile } from "@/lib/types";
 
-const navLinks = [
+const baseLinks = [
   { href: "/", label: "Queue" },
   { href: "/submit", label: "Submit" },
   { href: "/gallery", label: "Gallery" },
   { href: "/me", label: "History" },
 ];
 
-export function Navbar() {
+export function Navbar({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
+
+  const navLinks = profile?.role === "admin"
+    ? [...baseLinks, { href: "/admin", label: "Admin" }]
+    : baseLinks;
 
   return (
     <motion.header
@@ -62,12 +68,16 @@ export function Navbar() {
           })}
         </nav>
 
-        <Link
-          href="/login"
-          className="inline-flex h-9 items-center rounded-full bg-bambu-500 px-4 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-bambu-600 hover:shadow-md"
-        >
-          Sign in
-        </Link>
+        {profile ? (
+          <UserMenu profile={profile} />
+        ) : (
+          <Link
+            href="/login"
+            className="inline-flex h-9 items-center rounded-full bg-bambu-500 px-4 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-bambu-600 hover:shadow-md"
+          >
+            Sign in
+          </Link>
+        )}
       </div>
     </motion.header>
   );
