@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
+import { sendAccountApprovedEmail } from "@/lib/email";
 
 async function requireAdmin() {
   const profile = await getProfile();
@@ -18,7 +19,20 @@ export async function approveUser(formData: FormData): Promise<void> {
   if (!userId) return;
 
   const supabase = await createClient();
-  await supabase.from("profiles").update({ approved: true }).eq("id", userId);
+  const { data } = await supabase
+    .from("profiles")
+    .update({ approved: true })
+    .eq("id", userId)
+    .select("email, name")
+    .single();
+
+  if (data?.email) {
+    await sendAccountApprovedEmail({
+      to: data.email as string,
+      recipientName: data.name as string,
+    });
+  }
+
   revalidatePath("/admin");
 }
 

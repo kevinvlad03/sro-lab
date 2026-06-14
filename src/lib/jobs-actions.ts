@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
+import { sendPrintStatusEmail } from "@/lib/email";
+import { photoUrl } from "@/lib/photos";
 import type { JobStatus } from "@/lib/types";
 
 export type SubmitJobState = { error?: string } | null;
@@ -29,8 +31,6 @@ function safeUrl(raw: string) {
   }
 }
 
-// Fetch the og:image (or twitter:image) for a URL. Best-effort: returns null
-// on any error or timeout. Bounded by a 5s timeout and 500KB response cap.
 async function fetchThumbnail(pageUrl: string): Promise<string | null> {
   try {
     const res = await fetch(pageUrl, {
@@ -58,7 +58,6 @@ async function fetchThumbnail(pageUrl: string): Promise<string | null> {
     for (const re of patterns) {
       const m = html.match(re);
       if (m?.[1]) {
-        // Resolve relative URLs against the page URL.
         try {
           return new URL(m[1], pageUrl).toString();
         } catch {
@@ -149,8 +148,6 @@ export async function submitJob(
     }
   }
 
-  // Best-effort: grab a thumbnail for link submissions so the queue card
-  // has something to show. Doesn't block on failure.
   let thumbnailUrl: string | null = null;
   if (sourceUrl) {
     thumbnailUrl = await fetchThumbnail(sourceUrl);
@@ -195,6 +192,30 @@ async function requireAdmin() {
   return profile;
 }
 
+type OwnerRel = { email: string; name: string } | { email: string; name: string }[] | null;
+type JobOwnerRow = {
+  title: string;
+  owner_id: string;
+  owner: OwnerRel;
+};
+
+function ownerFrom(row: JobOwnerRow | null): { email: string; name: string } | null {
+  if (!row) return null;
+  if (!row.owner) return null;
+  if (Array.isArray(row.owner)) return row.owner[0] ?? null;
+  return row.owner;
+}
+
+async function fetchJobForEmail(jobId: string): Promise<JobOwnerRow | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("jobs")
+    .select("title, owner_id, owner:profiles!jobs_owner_id_fkey(email, name)")
+    .eq("id", jobId)
+    .single();
+  return (data as JobOwnerRow | null) ?? null;
+}
+
 const ADVANCE_TARGETS: Record<string, JobStatus> = {
   start: "printing",
   done: "done",
@@ -210,6 +231,8 @@ export async function advanceJobStatus(formData: FormData): Promise<void> {
   if (!jobId || !next) return;
 
   const supabase = await createClient();
+  const job = await fetchJobForEmail(jobId);
+
   const patch: Record<string, unknown> = { status: next };
   if (next === "printing") patch.started_at = new Date().toISOString();
   if (next === "done" || next === "failed" || next === "cancelled") {
@@ -217,6 +240,17 @@ export async function advanceJobStatus(formData: FormData): Promise<void> {
   }
 
   await supabase.from("jobs").update(patch).eq("id", jobId);
+
+  const owner = ownerFrom(job);
+  if (job && owner) {
+    await sendPrintStatusEmail({
+      to: owner.email,
+      recipientName: owner.name,
+      jobTitle: job.title,
+      status: next as "printing" | "done" | "failed" | "cancelled",
+    });
+  }
+
   revalidatePath("/");
 }
 
@@ -227,14 +261,30 @@ export async function rejectJob(formData: FormData): Promise<void> {
   if (!jobId) return;
 
   const supabase = await createClient();
+  const job = await fetchJobForEmail(jobId);
+
+  const reasonOrDefault = reason || "No reason given.";
+
   await supabase
     .from("jobs")
     .update({
       status: "rejected",
-      rejection_reason: reason || "No reason given.",
+      rejection_reason: reasonOrDefault,
       completed_at: new Date().toISOString(),
     })
     .eq("id", jobId);
+
+  const owner = ownerFrom(job);
+  if (job && owner) {
+    await sendPrintStatusEmail({
+      to: owner.email,
+      recipientName: owner.name,
+      jobTitle: job.title,
+      status: "rejected",
+      rejectionReason: reasonOrDefault,
+    });
+  }
+
   revalidatePath("/");
 }
 
@@ -247,8 +297,11 @@ export async function completeJob(formData: FormData): Promise<void> {
   if (!jobId) return;
 
   const supabase = await createClient();
+  const job = await fetchJobForEmail(jobId);
   const photo = formData.get("photo") as File | null;
   const hasPhoto = photo instanceof File && photo.size > 0;
+
+  let uploadedPhotoPath: string | null = null;
 
   if (hasPhoto) {
     if (photo.size > PHOTO_MAX_BYTES) return;
@@ -263,17 +316,16 @@ export async function completeJob(formData: FormData): Promise<void> {
         contentType: photo.type || "image/jpeg",
         upsert: false,
       });
-    if (uploadErr) return;
-
-    // We don't fail the completion if the metadata insert fails — the
-    // job still gets marked done.
-    const me = await getProfile();
-    if (me) {
-      await supabase.from("job_photos").insert({
-        job_id: jobId,
-        photo_path: path,
-        uploaded_by: me.id,
-      });
+    if (!uploadErr) {
+      uploadedPhotoPath = path;
+      const me = await getProfile();
+      if (me) {
+        await supabase.from("job_photos").insert({
+          job_id: jobId,
+          photo_path: path,
+          uploaded_by: me.id,
+        });
+      }
     }
   }
 
@@ -284,6 +336,17 @@ export async function completeJob(formData: FormData): Promise<void> {
       completed_at: new Date().toISOString(),
     })
     .eq("id", jobId);
+
+  const owner = ownerFrom(job);
+  if (job && owner) {
+    await sendPrintStatusEmail({
+      to: owner.email,
+      recipientName: owner.name,
+      jobTitle: job.title,
+      status: "done",
+      photoUrl: uploadedPhotoPath ? photoUrl(uploadedPhotoPath) : undefined,
+    });
+  }
 
   revalidatePath("/");
   revalidatePath("/me");
