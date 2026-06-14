@@ -1,4 +1,10 @@
+"use client";
+
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Sparkles } from "lucide-react";
 import { signInWithOAuthForm } from "@/lib/auth-actions";
+import { transitions } from "@/lib/motion";
 
 function GoogleIcon() {
   return (
@@ -40,6 +46,8 @@ const baseClass =
   "inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-surface text-sm font-medium transition-all duration-300 hover:border-bambu-500/40 hover:shadow-sm";
 
 export function OAuthButtons() {
+  const [appleNotice, setAppleNotice] = useState(false);
+
   return (
     <div className="flex flex-col gap-2.5">
       <form action={signInWithOAuthForm}>
@@ -49,13 +57,35 @@ export function OAuthButtons() {
           Continue with Google
         </button>
       </form>
-      <form action={signInWithOAuthForm}>
-        <input type="hidden" name="provider" value="apple" />
-        <button type="submit" className={baseClass}>
-          <AppleIcon />
-          Continue with Apple
-        </button>
-      </form>
+
+      <button
+        type="button"
+        onClick={() => setAppleNotice((v) => !v)}
+        className={baseClass}
+      >
+        <AppleIcon />
+        Continue with Apple
+      </button>
+
+      <AnimatePresence initial={false}>
+        {appleNotice && (
+          <motion.div
+            key="apple-notice"
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: "auto", y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={transitions.smooth}
+            className="overflow-hidden"
+          >
+            <div className="flex items-start gap-2 rounded-xl border border-bambu-500/30 bg-bambu-500/5 px-3 py-2 text-xs leading-relaxed text-bambu-700 dark:text-bambu-300">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Sign in with Apple is coming soon. Use Google or email for now.
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
