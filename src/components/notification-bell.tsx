@@ -10,6 +10,7 @@ import {
   Check,
   Play,
   ShieldCheck,
+  UserPlus,
   X,
 } from "lucide-react";
 import { markAllNotificationsRead } from "@/lib/notifications-actions";
@@ -24,6 +25,7 @@ const ICONS: Record<NotificationType, typeof Bell> = {
   job_cancelled: X,
   job_rejected: AlertCircle,
   account_approved: ShieldCheck,
+  new_signup: UserPlus,
 };
 
 const TINTS: Record<NotificationType, string> = {
@@ -33,6 +35,7 @@ const TINTS: Record<NotificationType, string> = {
   job_cancelled: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-300",
   job_rejected: "bg-amber-500/10 text-amber-600 dark:text-amber-300",
   account_approved: "bg-bambu-500/10 text-bambu-700 dark:text-bambu-300",
+  new_signup: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
 function timeAgo(iso: string) {
@@ -58,7 +61,11 @@ function NotificationRow({
 }) {
   const Icon = ICONS[item.type] ?? Bell;
   const tint = TINTS[item.type] ?? "bg-zinc-500/10 text-zinc-600";
-  const linkTarget = item.jobId ? "/me" : null;
+  const linkTarget = item.jobId
+    ? "/me"
+    : item.type === "new_signup"
+      ? "/admin"
+      : null;
 
   const inner = (
     <div className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors hover:bg-bambu-500/5">

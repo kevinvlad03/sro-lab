@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { sendPrintStatusEmail } from "@/lib/email";
@@ -192,12 +193,21 @@ async function requireAdmin() {
   return profile;
 }
 
-type OwnerRel = { email: string; name: string } | { email: string; name: string }[] | null;
+type OwnerRel =
+  | { email: string; name: string }
+  | { email: string; name: string }[]
+  | null;
 type JobOwnerRow = {
   title: string;
   owner_id: string;
   owner: OwnerRel;
 };
+
+// True when the admin acting on a job is the same person who submitted
+// it — we skip the email to avoid pinging yourself about your own click.
+function actingOnOwnJob(job: JobOwnerRow | null, adminId: string): boolean {
+  return !!job && job.owner_id === adminId;
+}
 
 function ownerFrom(row: JobOwnerRow | null): { email: string; name: string } | null {
   if (!row) return null;
@@ -224,7 +234,7 @@ const ADVANCE_TARGETS: Record<string, JobStatus> = {
 };
 
 export async function advanceJobStatus(formData: FormData): Promise<void> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const jobId = String(formData.get("job_id") ?? "");
   const action = String(formData.get("action") ?? "");
   const next = ADVANCE_TARGETS[action];
@@ -242,20 +252,22 @@ export async function advanceJobStatus(formData: FormData): Promise<void> {
   await supabase.from("jobs").update(patch).eq("id", jobId);
 
   const owner = ownerFrom(job);
-  if (job && owner) {
-    await sendPrintStatusEmail({
-      to: owner.email,
-      recipientName: owner.name,
-      jobTitle: job.title,
-      status: next as "printing" | "done" | "failed" | "cancelled",
-    });
+  if (job && owner && !actingOnOwnJob(job, admin.id)) {
+    after(() =>
+      sendPrintStatusEmail({
+        to: owner.email,
+        recipientName: owner.name,
+        jobTitle: job.title,
+        status: next as "printing" | "done" | "failed" | "cancelled",
+      }),
+    );
   }
 
   revalidatePath("/");
 }
 
 export async function rejectJob(formData: FormData): Promise<void> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const jobId = String(formData.get("job_id") ?? "");
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
   if (!jobId) return;
@@ -275,14 +287,16 @@ export async function rejectJob(formData: FormData): Promise<void> {
     .eq("id", jobId);
 
   const owner = ownerFrom(job);
-  if (job && owner) {
-    await sendPrintStatusEmail({
-      to: owner.email,
-      recipientName: owner.name,
-      jobTitle: job.title,
-      status: "rejected",
-      rejectionReason: reasonOrDefault,
-    });
+  if (job && owner && !actingOnOwnJob(job, admin.id)) {
+    after(() =>
+      sendPrintStatusEmail({
+        to: owner.email,
+        recipientName: owner.name,
+        jobTitle: job.title,
+        status: "rejected",
+        rejectionReason: reasonOrDefault,
+      }),
+    );
   }
 
   revalidatePath("/");
@@ -292,7 +306,7 @@ const PHOTO_ALLOWED = ["jpg", "jpeg", "png", "webp"];
 const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 export async function completeJob(formData: FormData): Promise<void> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const jobId = String(formData.get("job_id") ?? "");
   if (!jobId) return;
 
@@ -338,14 +352,17 @@ export async function completeJob(formData: FormData): Promise<void> {
     .eq("id", jobId);
 
   const owner = ownerFrom(job);
-  if (job && owner) {
-    await sendPrintStatusEmail({
-      to: owner.email,
-      recipientName: owner.name,
-      jobTitle: job.title,
-      status: "done",
-      photoUrl: uploadedPhotoPath ? photoUrl(uploadedPhotoPath) : undefined,
-    });
+  if (job && owner && !actingOnOwnJob(job, admin.id)) {
+    const photoUrlForEmail = uploadedPhotoPath ? photoUrl(uploadedPhotoPath) : undefined;
+    after(() =>
+      sendPrintStatusEmail({
+        to: owner.email,
+        recipientName: owner.name,
+        jobTitle: job.title,
+        status: "done",
+        photoUrl: photoUrlForEmail,
+      }),
+    );
   }
 
   revalidatePath("/");

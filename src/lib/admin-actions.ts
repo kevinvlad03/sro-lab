@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { sendAccountApprovedEmail } from "@/lib/email";
@@ -27,10 +28,9 @@ export async function approveUser(formData: FormData): Promise<void> {
     .single();
 
   if (data?.email) {
-    await sendAccountApprovedEmail({
-      to: data.email as string,
-      recipientName: data.name as string,
-    });
+    const to = data.email as string;
+    const name = data.name as string;
+    after(() => sendAccountApprovedEmail({ to, recipientName: name }));
   }
 
   revalidatePath("/admin");

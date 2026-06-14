@@ -7,7 +7,8 @@ export type NotificationType =
   | "job_failed"
   | "job_cancelled"
   | "job_rejected"
-  | "account_approved";
+  | "account_approved"
+  | "new_signup";
 
 export type NotificationItem = {
   id: string;
