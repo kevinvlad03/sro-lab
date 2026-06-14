@@ -8,6 +8,8 @@ import {
   EyeOff,
   FileBox,
   Link as LinkIcon,
+  Sliders,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -16,10 +18,31 @@ import { fadeUp, stagger, transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 type SourceMode = "file" | "link";
+type SettingsMode = "creator" | "custom";
 
 const sourceTabs: { id: SourceMode; label: string; icon: typeof FileBox }[] = [
   { id: "file", label: "Upload file", icon: FileBox },
   { id: "link", label: "Paste link", icon: LinkIcon },
+];
+
+const settingsTabs: {
+  id: SettingsMode;
+  label: string;
+  icon: typeof Sparkles;
+  blurb: string;
+}[] = [
+  {
+    id: "creator",
+    label: "Creator's preset",
+    icon: Sparkles,
+    blurb: "Use whatever the file or the link suggests. Easiest.",
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    icon: Sliders,
+    blurb: "Tune slicer parameters yourself.",
+  },
 ];
 
 const materials = ["PLA", "PETG", "ABS", "TPU", "Any"] as const;
@@ -32,6 +55,7 @@ function prettySize(bytes: number) {
 
 export function SubmitForm() {
   const [mode, setMode] = useState<SourceMode>("file");
+  const [settingsMode, setSettingsMode] = useState<SettingsMode>("creator");
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [infill, setInfill] = useState(20);
@@ -200,12 +224,15 @@ export function SubmitForm() {
                 placeholder="https://www.printables.com/model/..."
                 className="h-11 rounded-xl border border-border bg-surface px-4 text-sm transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
               />
+              <span className="text-[11px] text-muted">
+                We'll pull a thumbnail from the page automatically.
+              </span>
             </motion.label>
           )}
         </AnimatePresence>
       </motion.div>
 
-      <motion.div variants={fadeUp} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted">Color</span>
           <input
@@ -240,21 +267,68 @@ export function SubmitForm() {
             className="h-10 rounded-xl border border-border bg-surface px-3 text-sm transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
           />
         </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted">
-            Infill <span className="text-foreground">{infill}%</span>
-          </span>
-          <input
-            type="range"
-            name="infill"
-            min={0}
-            max={100}
-            step={5}
-            value={infill}
-            onChange={(e) => setInfill(Number(e.target.value))}
-            className="h-10 accent-bambu-500"
-          />
-        </label>
+      </motion.div>
+
+      <motion.div variants={fadeUp} className="flex flex-col gap-2.5">
+        <span className="text-xs font-medium text-muted">Settings</span>
+        <div className="relative grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
+          {settingsTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setSettingsMode(t.id)}
+              className={cn(
+                "relative inline-flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors duration-300",
+                settingsMode === t.id
+                  ? "text-foreground"
+                  : "text-muted hover:text-foreground",
+              )}
+            >
+              {settingsMode === t.id && (
+                <motion.span
+                  layoutId="settings-tab"
+                  className="absolute inset-0 rounded-full bg-bambu-500/10 ring-1 ring-bambu-500/30"
+                  transition={transitions.spring}
+                />
+              )}
+              <t.icon className="relative h-4 w-4" />
+              <span className="relative">{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <input type="hidden" name="settings_mode" value={settingsMode} />
+        <p className="text-[11px] text-muted">
+          {settingsTabs.find((t) => t.id === settingsMode)?.blurb}
+        </p>
+
+        <AnimatePresence initial={false}>
+          {settingsMode === "custom" && (
+            <motion.div
+              key="custom-settings"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={transitions.smooth}
+              className="overflow-hidden"
+            >
+              <label className="mt-3 flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted">
+                  Infill <span className="text-foreground">{infill}%</span>
+                </span>
+                <input
+                  type="range"
+                  name="infill"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={infill}
+                  onChange={(e) => setInfill(Number(e.target.value))}
+                  className="h-10 accent-bambu-500"
+                />
+              </label>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <motion.div variants={fadeUp} className="flex flex-col gap-1.5">

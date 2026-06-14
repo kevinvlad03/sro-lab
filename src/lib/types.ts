@@ -19,6 +19,8 @@ export type JobVisibility = "team" | "private";
 
 export type JobMaterial = "PLA" | "PETG" | "ABS" | "TPU" | "ANY";
 
+export type SettingsMode = "creator" | "custom";
+
 export type Job = {
   id: string;
   owner_id: string;
@@ -26,11 +28,13 @@ export type Job = {
   description: string;
   file_path: string | null;
   source_url: string | null;
+  thumbnail_url: string | null;
   color: string | null;
   material: string | null;
   infill: number | null;
   quantity: number;
   visibility: JobVisibility;
+  settings_mode: SettingsMode;
   status: JobStatus;
   priority: number;
   rejection_reason: string | null;

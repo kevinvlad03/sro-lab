@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Landing } from "@/components/landing";
 import { Queue } from "@/components/queue";
 import type { JobCardProps } from "@/components/job-card";
-import type { JobStatus, JobVisibility } from "@/lib/types";
+import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
 
 type JobRow = {
   id: string;
@@ -14,11 +14,13 @@ type JobRow = {
   infill: number | null;
   quantity: number;
   visibility: JobVisibility;
+  settings_mode: SettingsMode;
   status: JobStatus;
   priority: number;
   created_at: string;
   file_path: string | null;
   source_url: string | null;
+  thumbnail_url: string | null;
   owner: { name: string } | { name: string }[] | null;
 };
 
@@ -28,22 +30,31 @@ function ownerNameOf(owner: JobRow["owner"]): string {
   return owner.name;
 }
 
-function toCardProps(job: JobRow, selfId: string, position?: number): JobCardProps {
+function toCardProps(
+  job: JobRow,
+  selfId: string,
+  isAdmin: boolean,
+  position?: number,
+): JobCardProps {
   return {
     id: job.id,
     title: job.title,
     ownerName: ownerNameOf(job.owner),
     status: job.status,
     visibility: job.visibility,
+    settingsMode: job.settings_mode,
     color: job.color,
     material: job.material,
     infill: job.infill,
     quantity: job.quantity,
     hasFile: !!job.file_path,
     hasLink: !!job.source_url,
+    sourceUrl: job.source_url,
+    thumbnailUrl: job.thumbnail_url,
     createdAt: job.created_at,
     position,
     isOwn: job.owner_id === selfId,
+    isAdmin,
   };
 }
 
@@ -54,13 +65,16 @@ export default async function Home() {
     return <Landing />;
   }
 
+  const isAdmin = profile.role === "admin";
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("jobs")
     .select(
       `
       id, title, owner_id, color, material, infill, quantity,
-      visibility, status, priority, created_at, file_path, source_url,
+      visibility, settings_mode, status, priority, created_at,
+      file_path, source_url, thumbnail_url,
       owner:profiles!jobs_owner_id_fkey(name)
     `,
     )
@@ -72,11 +86,11 @@ export default async function Home() {
 
   const printing = jobs
     .filter((j) => j.status === "printing")
-    .map((j) => toCardProps(j, profile.id));
+    .map((j) => toCardProps(j, profile.id, isAdmin));
 
   const queued = jobs
     .filter((j) => j.status === "queued")
-    .map((j, i) => toCardProps(j, profile.id, i + 1));
+    .map((j, i) => toCardProps(j, profile.id, isAdmin, i + 1));
 
   return <Queue printing={printing} queued={queued} />;
 }
