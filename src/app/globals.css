@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --surface: #ffffff;
+  --border: #e5e5e5;
+  --muted: #737373;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --surface: #141414;
+    --border: #262626;
+    --muted: #a3a3a3;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+
+  --color-bambu-50: #e6f8ee;
+  --color-bambu-100: #c5efd6;
+  --color-bambu-200: #94e1b4;
+  --color-bambu-300: #5fd18c;
+  --color-bambu-400: #2bc267;
+  --color-bambu-500: #00ae42;
+  --color-bambu-600: #009638;
+  --color-bambu-700: #007a2d;
+  --color-bambu-800: #005d21;
+  --color-bambu-900: #003f16;
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  background-color: var(--color-bambu-200);
+  color: var(--color-bambu-900);
+}
