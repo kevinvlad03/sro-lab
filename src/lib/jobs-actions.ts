@@ -238,6 +238,58 @@ export async function rejectJob(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+const PHOTO_ALLOWED = ["jpg", "jpeg", "png", "webp"];
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+
+export async function completeJob(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const jobId = String(formData.get("job_id") ?? "");
+  if (!jobId) return;
+
+  const supabase = await createClient();
+  const photo = formData.get("photo") as File | null;
+  const hasPhoto = photo instanceof File && photo.size > 0;
+
+  if (hasPhoto) {
+    if (photo.size > PHOTO_MAX_BYTES) return;
+    const ext = photo.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!PHOTO_ALLOWED.includes(ext)) return;
+
+    const photoId = randomUUID();
+    const path = `${jobId}/${photoId}.${ext}`;
+    const { error: uploadErr } = await supabase.storage
+      .from("photos")
+      .upload(path, photo, {
+        contentType: photo.type || "image/jpeg",
+        upsert: false,
+      });
+    if (uploadErr) return;
+
+    // We don't fail the completion if the metadata insert fails — the
+    // job still gets marked done.
+    const me = await getProfile();
+    if (me) {
+      await supabase.from("job_photos").insert({
+        job_id: jobId,
+        photo_path: path,
+        uploaded_by: me.id,
+      });
+    }
+  }
+
+  await supabase
+    .from("jobs")
+    .update({
+      status: "done",
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", jobId);
+
+  revalidatePath("/");
+  revalidatePath("/me");
+  revalidatePath("/gallery");
+}
+
 export async function bumpJobPriority(formData: FormData): Promise<void> {
   await requireAdmin();
   const jobId = String(formData.get("job_id") ?? "");

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  Camera,
   Check,
   Eye,
   EyeOff,
@@ -18,6 +19,7 @@ import { StatusBadge } from "@/components/status-badge";
 import {
   advanceJobStatus,
   bumpJobPriority,
+  completeJob,
   rejectJob,
 } from "@/lib/jobs-actions";
 import { transitions } from "@/lib/motion";
@@ -133,6 +135,8 @@ export function JobCard(props: JobCardProps) {
   } = props;
 
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false);
+  const [donePhoto, setDonePhoto] = useState<File | null>(null);
 
   const VisIcon = visibility === "private" ? EyeOff : Eye;
 
@@ -256,14 +260,14 @@ export function JobCard(props: JobCardProps) {
 
               {status === "printing" && (
                 <>
-                  <form action={advanceJobStatus}>
-                    <input type="hidden" name="job_id" value={id} />
-                    <input type="hidden" name="action" value="done" />
-                    <button className={cn(adminBtn, adminBtnPrimary)}>
-                      <Check className="h-3.5 w-3.5" />
-                      Mark done
-                    </button>
-                  </form>
+                  <button
+                    type="button"
+                    onClick={() => setDoneOpen((v) => !v)}
+                    className={cn(adminBtn, adminBtnPrimary)}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Mark done
+                  </button>
                   <form action={advanceJobStatus}>
                     <input type="hidden" name="job_id" value={id} />
                     <input type="hidden" name="action" value="failed" />
@@ -310,6 +314,59 @@ export function JobCard(props: JobCardProps) {
                     </button>
                     <button type="submit" className={cn(adminBtn, adminBtnDanger)}>
                       Confirm reject
+                    </button>
+                  </div>
+                </div>
+              </motion.form>
+            )}
+
+            {doneOpen && status === "printing" && isAdmin && (
+              <motion.form
+                key="done-form"
+                action={completeJob}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={transitions.smooth}
+                className="overflow-hidden"
+              >
+                <input type="hidden" name="job_id" value={id} />
+                <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-border bg-background p-3">
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                    Finished-print photo (optional)
+                  </label>
+                  <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-dashed border-border bg-surface px-3 py-2.5 text-xs text-muted transition-colors hover:border-bambu-500/40 hover:text-foreground">
+                    <Camera className="h-4 w-4" />
+                    <span className="flex-1 truncate">
+                      {donePhoto ? donePhoto.name : "Add a photo (JPEG / PNG / WebP, max 10 MB)"}
+                    </span>
+                    {donePhoto && (
+                      <span className="text-[11px] text-bambu-600 dark:text-bambu-400">
+                        ready
+                      </span>
+                    )}
+                    <input
+                      type="file"
+                      name="photo"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={(e) => setDonePhoto(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoneOpen(false);
+                        setDonePhoto(null);
+                      }}
+                      className={cn(adminBtn, adminBtnGhost)}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className={cn(adminBtn, adminBtnPrimary)}>
+                      <Check className="h-3.5 w-3.5" />
+                      Confirm done
                     </button>
                   </div>
                 </div>

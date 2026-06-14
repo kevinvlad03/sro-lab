@@ -46,3 +46,11 @@ export type Job = {
 export type JobWithOwner = Job & {
   owner: { name: string } | null;
 };
+
+export type JobPhoto = {
+  id: string;
+  job_id: string;
+  photo_path: string;
+  uploaded_by: string;
+  created_at: string;
+};
