@@ -5,11 +5,19 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; success?: string } | null;
-
-const WORK_DOMAIN = "@sms-group.com";
+export type OAuthProvider = "google" | "apple";
 
 function normalizeEmail(input: FormDataEntryValue | null) {
   return String(input ?? "").trim().toLowerCase();
+}
+
+async function originFromHeaders() {
+  const h = await headers();
+  const origin = h.get("origin");
+  if (origin) return origin;
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("host") ?? "localhost:3000";
+  return `${proto}://${host}`;
 }
 
 export async function authAction(
@@ -43,8 +51,8 @@ async function signUp(formData: FormData): Promise<AuthState> {
   const password = String(formData.get("password") ?? "");
   const name = String(formData.get("name") ?? "").trim();
 
-  if (!email.endsWith(WORK_DOMAIN)) {
-    return { error: `Use your ${WORK_DOMAIN} address.` };
+  if (!email) {
+    return { error: "Please enter your email." };
   }
   if (password.length < 8) {
     return { error: "Password must be at least 8 characters." };
@@ -53,10 +61,7 @@ async function signUp(formData: FormData): Promise<AuthState> {
     return { error: "Please enter your name." };
   }
 
-  const h = await headers();
-  const origin =
-    h.get("origin") ??
-    `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host") ?? "localhost:3000"}`;
+  const origin = await originFromHeaders();
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
@@ -75,6 +80,31 @@ async function signUp(formData: FormData): Promise<AuthState> {
   return {
     success: `Check ${email} for a confirmation link to finish signing up.`,
   };
+}
+
+export async function signInWithOAuthForm(formData: FormData) {
+  const provider = String(formData.get("provider") ?? "") as OAuthProvider;
+  if (provider !== "google" && provider !== "apple") {
+    redirect("/login?error=invalid_provider");
+  }
+
+  const origin = await originFromHeaders();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${origin}/auth/callback`,
+    },
+  });
+
+  if (error || !data?.url) {
+    redirect(
+      `/login?error=${encodeURIComponent(error?.message ?? "oauth_failed")}`,
+    );
+  }
+
+  redirect(data.url);
 }
 
 export async function signOut() {

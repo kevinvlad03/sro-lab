@@ -13,9 +13,14 @@ create table if not exists public.profiles (
   email text not null unique,
   name text not null,
   role text not null default 'user' check (role in ('user', 'admin')),
+  approved boolean not null default false,
   avatar_url text,
   created_at timestamptz not null default now()
 );
+
+-- Idempotent: add `approved` to profiles tables created before the pivot.
+alter table public.profiles
+  add column if not exists approved boolean not null default false;
 
 create table if not exists public.jobs (
   id uuid primary key default gen_random_uuid(),
@@ -82,43 +87,56 @@ as $$
   );
 $$;
 
--- --------------------------------------------------------------------
--- Triggers: domain enforcement, profile creation, role guard
--- --------------------------------------------------------------------
-
--- Reject signups from any address that is not @sms-group.com
-create or replace function public.enforce_email_domain()
-returns trigger
-language plpgsql
+create or replace function public.is_approved()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
 as $$
-begin
-  if new.email is null or new.email !~* '^[^@]+@sms-group\.com$' then
-    raise exception 'Email must be a @sms-group.com address';
-  end if;
-  return new;
-end;
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and (approved = true or role = 'admin')
+  );
 $$;
 
-drop trigger if exists enforce_email_domain_trigger on auth.users;
-create trigger enforce_email_domain_trigger
-  before insert on auth.users
-  for each row execute procedure public.enforce_email_domain();
+-- --------------------------------------------------------------------
+-- Triggers: profile creation, role guard
+-- --------------------------------------------------------------------
 
--- Auto-create a profile row whenever a new auth user is inserted
+-- Clean up old domain-restriction trigger from earlier setups (idempotent)
+drop trigger if exists enforce_email_domain_trigger on auth.users;
+drop function if exists public.enforce_email_domain();
+
+-- Auto-create a profile row whenever a new auth user is inserted.
+-- The very first signup is bootstrapped as the admin (auto-approved);
+-- everyone after that lands in `approved = false` until an admin flips it.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  is_first boolean;
 begin
-  insert into public.profiles (id, email, name)
+  select not exists (select 1 from public.profiles where role = 'admin')
+    into is_first;
+
+  insert into public.profiles (id, email, name, role, approved)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1))
+    coalesce(
+      new.raw_user_meta_data->>'name',
+      new.raw_user_meta_data->>'full_name',
+      split_part(coalesce(new.email, ''), '@', 1)
+    ),
+    case when is_first then 'admin' else 'user' end,
+    case when is_first then true else false end
   )
   on conflict (id) do nothing;
+
   return new;
 end;
 $$;
@@ -187,7 +205,7 @@ drop policy if exists "jobs_insert_own" on public.jobs;
 create policy "jobs_insert_own"
   on public.jobs for insert
   to authenticated
-  with check (owner_id = auth.uid());
+  with check (owner_id = auth.uid() and public.is_approved());
 
 drop policy if exists "jobs_update_own_queued" on public.jobs;
 create policy "jobs_update_own_queued"

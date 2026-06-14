@@ -3,6 +3,7 @@ export type Profile = {
   email: string;
   name: string;
   role: "user" | "admin";
+  approved: boolean;
   avatar_url: string | null;
 };
 
