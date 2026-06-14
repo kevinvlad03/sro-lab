@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Logo } from "@/components/logo";
 import { UserMenu } from "@/components/user-menu";
+import { NotificationBell } from "@/components/notification-bell";
 import { transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
+import type { NotificationItem } from "@/lib/notifications";
 
 const baseLinks = [
   { href: "/", label: "Queue" },
@@ -16,7 +18,15 @@ const baseLinks = [
   { href: "/me", label: "History" },
 ];
 
-export function Navbar({ profile }: { profile: Profile | null }) {
+export function Navbar({
+  profile,
+  notifications,
+  unread,
+}: {
+  profile: Profile | null;
+  notifications: NotificationItem[];
+  unread: number;
+}) {
   const pathname = usePathname();
 
   const navLinks = profile?.role === "admin"
@@ -69,7 +79,10 @@ export function Navbar({ profile }: { profile: Profile | null }) {
         </nav>
 
         {profile ? (
-          <UserMenu profile={profile} />
+          <div className="flex items-center gap-2">
+            <NotificationBell items={notifications} unread={unread} />
+            <UserMenu profile={profile} />
+          </div>
         ) : (
           <Link
             href="/login"

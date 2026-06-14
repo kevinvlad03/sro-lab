@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { getProfile } from "@/lib/auth";
+import { getNotifications } from "@/lib/notifications";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -25,6 +26,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const profile = await getProfile();
+  const { items, unread } = profile
+    ? await getNotifications(profile.id)
+    : { items: [], unread: 0 };
 
   return (
     <html
@@ -32,7 +36,7 @@ export default async function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <Navbar profile={profile} />
+        <Navbar profile={profile} notifications={items} unread={unread} />
         <main className="flex-1 flex flex-col">{children}</main>
       </body>
     </html>
