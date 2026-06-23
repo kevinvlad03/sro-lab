@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
@@ -13,7 +13,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { submitJob, type SubmitJobState } from "@/lib/jobs-actions";
+import { submitJob } from "@/lib/jobs-actions";
+import { createClient } from "@/lib/supabase/client";
 import { fadeUp, stagger, transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,9 @@ const settingsTabs: {
 
 const materials = ["PLA", "PETG", "ABS", "TPU", "Any"] as const;
 
+const ALLOWED_EXT = ["stl", "3mf", "obj", "step", "stp"];
+const MAX_BYTES = 100 * 1024 * 1024;
+
 function prettySize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -61,11 +65,11 @@ export function SubmitForm() {
   const [infill, setInfill] = useState(20);
   const [visibility, setVisibility] = useState<"team" | "private">("team");
 
+  const [pending, setPending] = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [state, formAction, pending] = useActionState<SubmitJobState, FormData>(
-    submitJob,
-    null,
-  );
 
   function pickFile(f: File | null) {
     setFile(f);
@@ -83,9 +87,96 @@ export function SubmitForm() {
     if (f) pickFile(f);
   }
 
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (pending) return;
+    setError(null);
+
+    if (mode === "file") {
+      if (!file) {
+        setError("Drop in a file or switch to the link tab.");
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        setError("File is too large (max 100 MB).");
+        return;
+      }
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_EXT.includes(ext)) {
+        setError(
+          `Unsupported file type. Use ${ALLOWED_EXT.join(", ").toUpperCase()}.`,
+        );
+        return;
+      }
+    }
+
+    setPending(true);
+
+    const supabase = createClient();
+    let uploadedPath: string | null = null;
+
+    try {
+      if (mode === "file" && file) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          setError("Please sign in again and retry.");
+          setPending(false);
+          return;
+        }
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "stl";
+        const safeName = file.name
+          .replace(/[^a-zA-Z0-9._-]/g, "_")
+          .slice(0, 80);
+        const folder = crypto.randomUUID();
+        const finalName = safeName.endsWith(`.${ext}`)
+          ? safeName
+          : `${folder}.${ext}`;
+        uploadedPath = `${user.id}/${folder}/${finalName}`;
+
+        setUploadPct(0);
+        const { error: upErr } = await supabase.storage
+          .from("prints")
+          .upload(uploadedPath, file, {
+            contentType: file.type || "application/octet-stream",
+            upsert: false,
+          });
+        setUploadPct(null);
+
+        if (upErr) {
+          setError(`Upload failed: ${upErr.message}`);
+          setPending(false);
+          return;
+        }
+      }
+
+      const form = e.currentTarget;
+      const formData = new FormData(form);
+      if (uploadedPath) formData.set("file_path", uploadedPath);
+
+      const result = await submitJob(null, formData);
+
+      if (result?.error) {
+        setError(result.error);
+        if (uploadedPath) {
+          await supabase.storage.from("prints").remove([uploadedPath]);
+        }
+        setPending(false);
+      }
+      // On success, submitJob redirects — no further work here.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+      if (uploadedPath) {
+        await supabase.storage.from("prints").remove([uploadedPath]);
+      }
+      setPending(false);
+    }
+  }
+
   return (
     <motion.form
-      action={formAction}
+      onSubmit={onSubmit}
       initial="hidden"
       animate="visible"
       variants={stagger}
@@ -173,7 +264,6 @@ export function SubmitForm() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  name="file"
                   accept=".stl,.3mf,.obj,.step,.stp"
                   className="sr-only"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -225,7 +315,7 @@ export function SubmitForm() {
                 className="h-11 rounded-xl border border-border bg-surface px-4 text-sm transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
               />
               <span className="text-[11px] text-muted">
-                We'll pull a thumbnail from the page automatically.
+                We&apos;ll pull a thumbnail from the page automatically.
               </span>
             </motion.label>
           )}
@@ -364,7 +454,7 @@ export function SubmitForm() {
       </motion.div>
 
       <AnimatePresence>
-        {state?.error && (
+        {error && (
           <motion.p
             key="error"
             initial={{ opacity: 0, y: -4 }}
@@ -373,7 +463,7 @@ export function SubmitForm() {
             transition={transitions.smooth}
             className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-700 dark:text-red-300"
           >
-            {state.error}
+            {error}
           </motion.p>
         )}
       </AnimatePresence>
@@ -384,7 +474,11 @@ export function SubmitForm() {
           disabled={pending}
           className="group inline-flex h-12 items-center gap-2 rounded-full bg-bambu-500 px-6 text-sm font-medium text-white shadow-sm transition-all duration-500 ease-out hover:bg-bambu-600 hover:shadow-lg hover:gap-3 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pending ? (file ? "Uploading..." : "Submitting...") : "Add to queue"}
+          {pending
+            ? uploadPct !== null
+              ? "Uploading..."
+              : "Submitting..."
+            : "Add to queue"}
           {!pending && (
             <ArrowRight className="h-4 w-4 transition-transform duration-500 group-hover:translate-x-0.5" />
           )}

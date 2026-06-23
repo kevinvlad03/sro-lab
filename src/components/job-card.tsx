@@ -7,6 +7,7 @@ import {
   ArrowUpToLine,
   Camera,
   Check,
+  Download,
   Eye,
   EyeOff,
   FileBox,
@@ -20,8 +21,10 @@ import {
   advanceJobStatus,
   bumpJobPriority,
   completeJob,
+  getJobDownloadUrl,
   rejectJob,
 } from "@/lib/jobs-actions";
+import { createClient } from "@/lib/supabase/client";
 import { transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
@@ -47,6 +50,9 @@ export type JobCardProps = {
   isAdmin: boolean;
 };
 
+const PHOTO_ALLOWED_EXT = ["jpg", "jpeg", "png", "webp"];
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+
 function timeAgo(iso: string) {
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -61,16 +67,12 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
-const adminBtn =
+const btn =
   "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors duration-300";
-
-const adminBtnPrimary =
-  "bg-bambu-500 text-white hover:bg-bambu-600";
-
-const adminBtnGhost =
+const btnPrimary = "bg-bambu-500 text-white hover:bg-bambu-600 disabled:opacity-60 disabled:cursor-not-allowed";
+const btnGhost =
   "border border-border bg-background text-foreground hover:border-bambu-500/40 hover:text-bambu-700 dark:hover:text-bambu-300";
-
-const adminBtnDanger =
+const btnDanger =
   "border border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300 hover:bg-red-500/10";
 
 function Thumb({
@@ -98,9 +100,7 @@ function Thumb({
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-bambu-500/5 text-bambu-500/80">
-          {hasFile || hasLink ? (
-            <FallbackIcon className="h-5 w-5" />
-          ) : null}
+          {hasFile || hasLink ? <FallbackIcon className="h-5 w-5" /> : null}
         </div>
       )}
       {typeof position === "number" && (
@@ -137,8 +137,11 @@ export function JobCard(props: JobCardProps) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
   const [donePhoto, setDonePhoto] = useState<File | null>(null);
+  const [donePending, setDonePending] = useState(false);
+  const [doneError, setDoneError] = useState<string | null>(null);
 
   const VisIcon = visibility === "private" ? EyeOff : Eye;
+  const canDownload = hasFile && (isOwn || isAdmin);
 
   const chips = [
     color ? color : null,
@@ -153,6 +156,59 @@ export function JobCard(props: JobCardProps) {
       : null;
 
   const showAdminRow = isAdmin && (status === "queued" || status === "printing");
+
+  async function onConfirmDone(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (donePending) return;
+    setDoneError(null);
+
+    if (donePhoto) {
+      if (donePhoto.size > PHOTO_MAX_BYTES) {
+        setDoneError("Photo is too large (max 10 MB).");
+        return;
+      }
+      const ext = donePhoto.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!PHOTO_ALLOWED_EXT.includes(ext)) {
+        setDoneError("Use a JPEG, PNG, or WebP image.");
+        return;
+      }
+    }
+
+    setDonePending(true);
+    const supabase = createClient();
+    let uploadedPath: string | null = null;
+
+    try {
+      if (donePhoto) {
+        const ext = donePhoto.name.split(".").pop()?.toLowerCase() ?? "jpg";
+        uploadedPath = `${id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("photos")
+          .upload(uploadedPath, donePhoto, {
+            contentType: donePhoto.type || "image/jpeg",
+            upsert: false,
+          });
+        if (upErr) {
+          setDoneError(`Photo upload failed: ${upErr.message}`);
+          setDonePending(false);
+          return;
+        }
+      }
+
+      const formData = new FormData();
+      formData.set("job_id", id);
+      if (uploadedPath) formData.set("photo_path", uploadedPath);
+      await completeJob(formData);
+      // Server revalidates; the card disappears from the queue on its
+      // own. No need to reset state.
+    } catch (err) {
+      setDoneError(err instanceof Error ? err.message : "Something went wrong.");
+      if (uploadedPath) {
+        await supabase.storage.from("photos").remove([uploadedPath]);
+      }
+      setDonePending(false);
+    }
+  }
 
   return (
     <motion.div
@@ -192,8 +248,21 @@ export function JobCard(props: JobCardProps) {
             <StatusBadge status={status} />
           </div>
 
-          {(chips.length > 0 || settingsChip) && (
+          {(chips.length > 0 || settingsChip || canDownload) && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {canDownload && (
+                <form action={getJobDownloadUrl}>
+                  <input type="hidden" name="job_id" value={id} />
+                  <button
+                    type="submit"
+                    title="Download the file"
+                    className="inline-flex items-center gap-1 rounded-full border border-bambu-500/30 bg-bambu-500/5 px-2 py-0.5 text-[11px] font-medium text-bambu-700 transition-colors hover:bg-bambu-500/10 dark:text-bambu-300"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </button>
+                </form>
+              )}
               {settingsChip && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-bambu-500/30 bg-bambu-500/5 px-2 py-0.5 text-[11px] font-medium text-bambu-700 dark:text-bambu-300">
                   <settingsChip.Icon className="h-3 w-3" />
@@ -222,7 +291,7 @@ export function JobCard(props: JobCardProps) {
                   <form action={advanceJobStatus}>
                     <input type="hidden" name="job_id" value={id} />
                     <input type="hidden" name="action" value="start" />
-                    <button className={cn(adminBtn, adminBtnPrimary)}>
+                    <button className={cn(btn, btnPrimary)}>
                       <Play className="h-3.5 w-3.5" />
                       Start
                     </button>
@@ -230,7 +299,7 @@ export function JobCard(props: JobCardProps) {
                   <button
                     type="button"
                     onClick={() => setRejectOpen((v) => !v)}
-                    className={cn(adminBtn, adminBtnDanger)}
+                    className={cn(btn, btnDanger)}
                   >
                     <X className="h-3.5 w-3.5" />
                     Reject
@@ -238,20 +307,14 @@ export function JobCard(props: JobCardProps) {
                   <form action={bumpJobPriority}>
                     <input type="hidden" name="job_id" value={id} />
                     <input type="hidden" name="direction" value="top" />
-                    <button
-                      title="Move to top"
-                      className={cn(adminBtn, adminBtnGhost)}
-                    >
+                    <button title="Move to top" className={cn(btn, btnGhost)}>
                       <ArrowUpToLine className="h-3.5 w-3.5" />
                     </button>
                   </form>
                   <form action={bumpJobPriority}>
                     <input type="hidden" name="job_id" value={id} />
                     <input type="hidden" name="direction" value="bottom" />
-                    <button
-                      title="Move to bottom"
-                      className={cn(adminBtn, adminBtnGhost)}
-                    >
+                    <button title="Move to bottom" className={cn(btn, btnGhost)}>
                       <ArrowDownToLine className="h-3.5 w-3.5" />
                     </button>
                   </form>
@@ -263,7 +326,7 @@ export function JobCard(props: JobCardProps) {
                   <button
                     type="button"
                     onClick={() => setDoneOpen((v) => !v)}
-                    className={cn(adminBtn, adminBtnPrimary)}
+                    className={cn(btn, btnPrimary)}
                   >
                     <Check className="h-3.5 w-3.5" />
                     Mark done
@@ -271,7 +334,7 @@ export function JobCard(props: JobCardProps) {
                   <form action={advanceJobStatus}>
                     <input type="hidden" name="job_id" value={id} />
                     <input type="hidden" name="action" value="failed" />
-                    <button className={cn(adminBtn, adminBtnDanger)}>
+                    <button className={cn(btn, btnDanger)}>
                       <X className="h-3.5 w-3.5" />
                       Mark failed
                     </button>
@@ -308,11 +371,11 @@ export function JobCard(props: JobCardProps) {
                     <button
                       type="button"
                       onClick={() => setRejectOpen(false)}
-                      className={cn(adminBtn, adminBtnGhost)}
+                      className={cn(btn, btnGhost)}
                     >
                       Cancel
                     </button>
-                    <button type="submit" className={cn(adminBtn, adminBtnDanger)}>
+                    <button type="submit" className={cn(btn, btnDanger)}>
                       Confirm reject
                     </button>
                   </div>
@@ -323,14 +386,13 @@ export function JobCard(props: JobCardProps) {
             {doneOpen && status === "printing" && isAdmin && (
               <motion.form
                 key="done-form"
-                action={completeJob}
+                onSubmit={onConfirmDone}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={transitions.smooth}
                 className="overflow-hidden"
               >
-                <input type="hidden" name="job_id" value={id} />
                 <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-border bg-background p-3">
                   <label className="text-[11px] font-medium uppercase tracking-wider text-muted">
                     Finished-print photo (optional)
@@ -347,26 +409,38 @@ export function JobCard(props: JobCardProps) {
                     )}
                     <input
                       type="file"
-                      name="photo"
                       accept="image/jpeg,image/png,image/webp"
                       className="sr-only"
                       onChange={(e) => setDonePhoto(e.target.files?.[0] ?? null)}
                     />
                   </label>
+                  {doneError && (
+                    <p className="rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-1.5 text-[11px] text-red-700 dark:text-red-300">
+                      {doneError}
+                    </p>
+                  )}
                   <div className="flex items-center justify-end gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
                         setDoneOpen(false);
                         setDonePhoto(null);
+                        setDoneError(null);
                       }}
-                      className={cn(adminBtn, adminBtnGhost)}
+                      className={cn(btn, btnGhost)}
+                      disabled={donePending}
                     >
                       Cancel
                     </button>
-                    <button type="submit" className={cn(adminBtn, adminBtnPrimary)}>
+                    <button
+                      type="submit"
+                      disabled={donePending}
+                      className={cn(btn, btnPrimary)}
+                    >
                       <Check className="h-3.5 w-3.5" />
-                      Confirm done
+                      {donePending
+                        ? donePhoto ? "Uploading..." : "Saving..."
+                        : "Confirm done"}
                     </button>
                   </div>
                 </div>
