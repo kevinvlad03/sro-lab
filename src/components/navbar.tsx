@@ -16,6 +16,7 @@ const baseLinks = [
   { href: "/submit", label: "Submit" },
   { href: "/gallery", label: "Gallery" },
   { href: "/me", label: "History" },
+  { href: "/roadmap", label: "Roadmap" },
 ];
 
 export function Navbar({
@@ -45,6 +46,13 @@ export function Navbar({
           <Logo className="h-7 w-7 transition-transform duration-500 ease-out group-hover:rotate-3" />
           <span className="text-base font-semibold tracking-tight">
             SRO <span className="text-bambu-500">Lab</span>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-bambu-500/30 bg-bambu-500/5 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-bambu-700 dark:text-bambu-300">
+            <span className="relative inline-flex h-1.5 w-1.5">
+              <span className="absolute inset-0 animate-ping rounded-full bg-bambu-500/60" />
+              <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-bambu-500" />
+            </span>
+            Beta
           </span>
         </Link>
 
