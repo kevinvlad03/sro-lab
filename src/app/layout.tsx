@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
+import { NotificationListener } from "@/components/notification-listener";
 import { getProfile } from "@/lib/auth";
 import { getNotifications } from "@/lib/notifications";
 
@@ -41,6 +42,7 @@ export default async function RootLayout({
       >
         <Navbar profile={profile} notifications={items} unread={unread} />
         <main className="flex-1 flex flex-col">{children}</main>
+        {profile && <NotificationListener userId={profile.id} />}
       </body>
     </html>
   );

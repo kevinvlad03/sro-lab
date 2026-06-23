@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Logo } from "@/components/logo";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/components/notification-bell";
+import { MobileMenu } from "@/components/mobile-menu";
 import { transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
@@ -86,19 +87,22 @@ export function Navbar({
           })}
         </nav>
 
-        {profile ? (
-          <div className="flex items-center gap-2">
-            <NotificationBell items={notifications} unread={unread} />
-            <UserMenu profile={profile} />
-          </div>
-        ) : (
-          <Link
-            href="/login"
-            className="inline-flex h-9 items-center rounded-full bg-bambu-500 px-4 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-bambu-600 hover:shadow-md"
-          >
-            Sign in
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {profile ? (
+            <>
+              <NotificationBell items={notifications} unread={unread} />
+              <UserMenu profile={profile} />
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex h-9 items-center rounded-full bg-bambu-500 px-4 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-bambu-600 hover:shadow-md"
+            >
+              Sign in
+            </Link>
+          )}
+          <MobileMenu links={navLinks} />
+        </div>
       </div>
     </motion.header>
   );
