@@ -166,6 +166,11 @@ export function JobCard(props: JobCardProps) {
     if (donePending) return;
     setDoneError(null);
 
+    // Capture the form element synchronously. After any `await` below,
+    // React nullifies e.currentTarget on the synthetic event, which would
+    // make `new FormData(e.currentTarget)` throw later.
+    const form = e.currentTarget;
+
     if (donePhoto) {
       if (donePhoto.size > PHOTO_MAX_BYTES) {
         setDoneError("Photo is too large (max 10 MB).");
@@ -199,11 +204,11 @@ export function JobCard(props: JobCardProps) {
         }
       }
 
-      // Pull values from the form so print_minutes + filament_grams come
-      // along, then override the file-bearing fields with our pre-uploaded
-      // path (and clear the photo blob so the Server Action body stays
-      // tiny — the file is already in Storage).
-      const formData = new FormData(e.currentTarget);
+      // Pull values from the captured form so print_minutes + filament_grams
+      // come along, then override the file-bearing fields with our pre-
+      // uploaded path (and clear the photo blob so the Server Action body
+      // stays tiny — the file is already in Storage).
+      const formData = new FormData(form);
       formData.delete("photo");
       formData.set("job_id", id);
       if (uploadedPath) formData.set("photo_path", uploadedPath);
