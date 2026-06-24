@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowDownToLine,
@@ -141,6 +142,7 @@ export function JobCard(props: JobCardProps) {
   const [donePhoto, setDonePhoto] = useState<File | null>(null);
   const [donePending, setDonePending] = useState(false);
   const [doneError, setDoneError] = useState<string | null>(null);
+  const router = useRouter();
 
   const VisIcon = visibility === "private" ? EyeOff : Eye;
   const canDownload = hasFile && (isOwn || isAdmin);
@@ -206,8 +208,14 @@ export function JobCard(props: JobCardProps) {
       formData.set("job_id", id);
       if (uploadedPath) formData.set("photo_path", uploadedPath);
       await completeJob(formData);
-      // Server revalidates; the card disappears from the queue on its
-      // own. No need to reset state.
+
+      // Reset local state so the button stops saying "Saving..." even
+      // before the parent unmounts us, then ask Next.js to refetch the
+      // route so the card slides out of the queue.
+      setDonePending(false);
+      setDoneOpen(false);
+      setDonePhoto(null);
+      router.refresh();
     } catch (err) {
       setDoneError(err instanceof Error ? err.message : "Something went wrong.");
       if (uploadedPath) {
