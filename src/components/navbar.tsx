@@ -15,6 +15,7 @@ import type { NotificationItem } from "@/lib/notifications";
 const baseLinks = [
   { href: "/", label: "Queue" },
   { href: "/submit", label: "Submit" },
+  { href: "/stock", label: "Stock" },
   { href: "/gallery", label: "Gallery" },
   { href: "/me", label: "History" },
   { href: "/roadmap", label: "Roadmap" },
