@@ -3,8 +3,14 @@
 import { motion } from "motion/react";
 import { Activity, Clock, Layers, Package } from "lucide-react";
 import { fadeUp, stagger, transitions } from "@/lib/motion";
-import type { UsageTotals, WeeklyRow } from "@/lib/usage";
-import { formatGrams, formatMinutes } from "@/lib/usage";
+import {
+  FILAMENT_QUOTA_GRAMS,
+  formatGrams,
+  formatMinutes,
+  type UsageTotals,
+  type WeeklyRow,
+} from "@/lib/usage";
+import { cn } from "@/lib/utils";
 
 function formatWeekStart(iso: string) {
   const d = new Date(iso + "T00:00:00Z");
@@ -41,6 +47,12 @@ function StatTile({
   );
 }
 
+function quotaTint(pct: number) {
+  if (pct >= 100) return { bar: "bg-red-500", text: "text-red-700 dark:text-red-300" };
+  if (pct >= 80) return { bar: "bg-amber-500", text: "text-amber-700 dark:text-amber-300" };
+  return { bar: "bg-bambu-500", text: "text-bambu-700 dark:text-bambu-300" };
+}
+
 export function UsageStats({
   thisWeek,
   lifetime,
@@ -51,6 +63,12 @@ export function UsageStats({
   weeks: WeeklyRow[];
 }) {
   const hasAnyHistory = lifetime.count > 0 || weeks.length > 0;
+  const quotaPct = Math.min(
+    (lifetime.grams / FILAMENT_QUOTA_GRAMS) * 100,
+    999,
+  );
+  const tint = quotaTint(quotaPct);
+  const remaining = Math.max(0, FILAMENT_QUOTA_GRAMS - lifetime.grams);
 
   return (
     <section className="mb-8">
@@ -80,7 +98,7 @@ export function UsageStats({
         <StatTile
           label="Print time"
           value={formatMinutes(lifetime.minutes)}
-          sub="cumulative"
+          sub={`${formatMinutes(thisWeek.minutes)} this week`}
           Icon={Clock}
         />
         <StatTile
@@ -97,6 +115,39 @@ export function UsageStats({
           }
           Icon={Activity}
         />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={transitions.smooth}
+        className="mt-3 rounded-2xl border border-border bg-surface p-4"
+      >
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <span className="text-xs font-medium text-muted">
+            Filament budget
+          </span>
+          <span className={cn("text-xs font-medium tabular-nums", tint.text)}>
+            {formatGrams(lifetime.grams)} of {formatGrams(FILAMENT_QUOTA_GRAMS)}
+            {quotaPct < 100 ? (
+              <span className="text-muted">
+                {" "}
+                · {formatGrams(remaining)} left
+              </span>
+            ) : (
+              <span> · over budget</span>
+            )}
+          </span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-bambu-500/5">
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: Math.min(quotaPct, 100) / 100 }}
+            transition={transitions.smooth}
+            className={cn("h-full origin-left rounded-full", tint.bar)}
+            style={{ width: "100%" }}
+          />
+        </div>
       </motion.div>
 
       {hasAnyHistory && weeks.length > 0 && (

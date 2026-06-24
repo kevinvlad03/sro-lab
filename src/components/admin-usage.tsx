@@ -1,9 +1,16 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Activity, Clock, Layers } from "lucide-react";
+import { Activity, Clock, Layers, ShieldCheck } from "lucide-react";
 import { fadeUp, stagger, transitions } from "@/lib/motion";
-import { formatGrams, formatMinutes, type UserUsageRow } from "@/lib/usage";
+import {
+  FILAMENT_QUOTA_GRAMS,
+  HEAVY_TIME_MINUTES_PER_WEEK,
+  formatGrams,
+  formatMinutes,
+  type UserUsageRow,
+} from "@/lib/usage";
+import { cn } from "@/lib/utils";
 
 function initialsOf(name: string) {
   return (
@@ -16,11 +23,16 @@ function initialsOf(name: string) {
   );
 }
 
+function quotaTint(pct: number) {
+  if (pct >= 100) return { bar: "bg-red-500", text: "text-red-700 dark:text-red-300" };
+  if (pct >= 80) return { bar: "bg-amber-500", text: "text-amber-700 dark:text-amber-300" };
+  return { bar: "bg-bambu-500", text: "text-bambu-700 dark:text-bambu-300" };
+}
+
 export function AdminUsage({ rows }: { rows: UserUsageRow[] }) {
   const totalGrams = rows.reduce((sum, r) => sum + r.lifetime.grams, 0);
   const totalMinutes = rows.reduce((sum, r) => sum + r.lifetime.minutes, 0);
   const totalCount = rows.reduce((sum, r) => sum + r.lifetime.count, 0);
-  const maxGrams = Math.max(1, ...rows.map((r) => r.lifetime.grams));
 
   return (
     <section className="mt-10">
@@ -85,47 +97,103 @@ export function AdminUsage({ rows }: { rows: UserUsageRow[] }) {
             className="flex flex-col gap-2"
           >
             {rows.map((row) => {
-              const widthPct = (row.lifetime.grams / maxGrams) * 100;
+              const quotaPct = Math.min(
+                (row.lifetime.grams / FILAMENT_QUOTA_GRAMS) * 100,
+                999,
+              );
+              const tint = quotaTint(quotaPct);
+              const heavy = row.thisWeek.minutes >= HEAVY_TIME_MINUTES_PER_WEEK;
+
               return (
                 <motion.div
                   key={row.userId}
                   variants={fadeUp}
-                  className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4"
+                  className="rounded-2xl border border-border bg-surface p-4"
                 >
-                  <motion.div
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: widthPct / 100 }}
-                    transition={transitions.smooth}
-                    className="absolute inset-y-0 left-0 origin-left bg-bambu-500/[0.06]"
-                    style={{ width: "100%" }}
-                  />
-                  <div className="relative flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bambu-500/15 text-xs font-semibold text-bambu-700 dark:text-bambu-300">
                       {initialsOf(row.name)}
                     </span>
+
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold tracking-tight">
-                        {row.name}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="truncate text-sm font-semibold tracking-tight">
+                          {row.name}
+                        </p>
                         {row.role === "admin" && (
-                          <span className="ml-2 rounded-full bg-bambu-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-bambu-700 dark:text-bambu-300">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-bambu-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-bambu-700 dark:text-bambu-300">
+                            <ShieldCheck className="h-2.5 w-2.5" />
                             Admin
                           </span>
                         )}
-                      </p>
+                        {heavy && (
+                          <span
+                            title="Lot of print time this week — consider pushing their next submit down the queue"
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300"
+                          >
+                            <Clock className="h-2.5 w-2.5" />
+                            Heavy this week
+                          </span>
+                        )}
+                      </div>
                       <p className="truncate text-xs text-muted">{row.email}</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-3 text-right">
-                      <Stat
-                        label="This week"
-                        value={formatGrams(row.thisWeek.grams)}
-                      />
-                      <Stat
-                        label="Total"
-                        value={formatGrams(row.lifetime.grams)}
-                      />
-                      <Stat
-                        label="Prints"
-                        value={String(row.lifetime.count)}
+
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-0.5 text-right">
+                      <span className="text-[10px] uppercase tracking-wider text-muted">
+                        Filament
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">
+                        Time
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted">
+                        Prints
+                      </span>
+
+                      <span className="text-sm font-semibold tabular-nums">
+                        {formatGrams(row.thisWeek.grams)}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums">
+                        {formatMinutes(row.thisWeek.minutes)}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums">
+                        {row.thisWeek.count}
+                      </span>
+                      <span className="text-[10px] text-muted">this week</span>
+                      <span className="text-[10px] text-muted">this week</span>
+                      <span className="text-[10px] text-muted">this week</span>
+
+                      <span className="mt-1 text-sm font-semibold tabular-nums">
+                        {formatGrams(row.lifetime.grams)}
+                      </span>
+                      <span className="mt-1 text-sm font-semibold tabular-nums">
+                        {formatMinutes(row.lifetime.minutes)}
+                      </span>
+                      <span className="mt-1 text-sm font-semibold tabular-nums">
+                        {row.lifetime.count}
+                      </span>
+                      <span className="text-[10px] text-muted">total</span>
+                      <span className="text-[10px] text-muted">total</span>
+                      <span className="text-[10px] text-muted">total</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="mb-1 flex items-center justify-between text-[11px]">
+                      <span className="text-muted">
+                        Filament budget
+                      </span>
+                      <span className={cn("font-medium tabular-nums", tint.text)}>
+                        {formatGrams(row.lifetime.grams)} of {formatGrams(FILAMENT_QUOTA_GRAMS)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-bambu-500/5">
+                      <motion.div
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: Math.min(quotaPct, 100) / 100 }}
+                        transition={transitions.smooth}
+                        className={cn("h-full origin-left rounded-full", tint.bar)}
+                        style={{ width: "100%" }}
                       />
                     </div>
                   </div>
@@ -136,16 +204,5 @@ export function AdminUsage({ rows }: { rows: UserUsageRow[] }) {
         </>
       )}
     </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col items-end">
-      <span className="text-[10px] uppercase tracking-wider text-muted">
-        {label}
-      </span>
-      <span className="text-sm font-semibold tabular-nums">{value}</span>
-    </div>
   );
 }

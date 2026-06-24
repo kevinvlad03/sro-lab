@@ -50,3 +50,14 @@ export function formatGrams(grams: number): string {
   if (grams >= 1000) return `${(grams / 1000).toFixed(1)}kg`;
   return `${grams}g`;
 }
+
+// How much filament each user is allowed to burn through, in grams.
+// 1 kg per person matches the size of a standard PLA spool — change
+// here if SRO's policy ever shifts.
+export const FILAMENT_QUOTA_GRAMS = 1000;
+
+// "Heavy printer this week" threshold (in minutes). When a user's
+// THIS WEEK print time crosses this, /admin paints a small clock
+// badge next to their name — a hint that the admin may want to push
+// their next submit further down the queue.
+export const HEAVY_TIME_MINUTES_PER_WEEK = 180;
