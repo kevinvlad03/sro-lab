@@ -227,7 +227,14 @@ export async function advanceJobStatus(formData: FormData): Promise<void> {
     patch.completed_at = new Date().toISOString();
   }
 
-  await supabase.from("jobs").update(patch).eq("id", jobId);
+  const { error: updateErr } = await supabase
+    .from("jobs")
+    .update(patch)
+    .eq("id", jobId);
+  if (updateErr) {
+    console.error("[advanceJobStatus] update failed:", updateErr);
+    throw new Error(`Status update failed: ${updateErr.message}`);
+  }
 
   const owner = ownerFrom(job);
   if (job && owner && !actingOnOwnJob(job, admin.id)) {
@@ -255,7 +262,7 @@ export async function rejectJob(formData: FormData): Promise<void> {
 
   const reasonOrDefault = reason || "No reason given.";
 
-  await supabase
+  const { error: rejectErr } = await supabase
     .from("jobs")
     .update({
       status: "rejected",
@@ -263,6 +270,10 @@ export async function rejectJob(formData: FormData): Promise<void> {
       completed_at: new Date().toISOString(),
     })
     .eq("id", jobId);
+  if (rejectErr) {
+    console.error("[rejectJob] update failed:", rejectErr);
+    throw new Error(`Reject failed: ${rejectErr.message}`);
+  }
 
   const owner = ownerFrom(job);
   if (job && owner && !actingOnOwnJob(job, admin.id)) {
@@ -298,14 +309,18 @@ export async function completeJob(formData: FormData): Promise<void> {
   const filamentGrams = clampInt(formData.get("filament_grams"), 0, 100000);
 
   if (photoPath) {
-    await supabase.from("job_photos").insert({
+    const { error: photoErr } = await supabase.from("job_photos").insert({
       job_id: jobId,
       photo_path: photoPath,
       uploaded_by: admin.id,
     });
+    if (photoErr) {
+      console.error("[completeJob] job_photos insert failed:", photoErr);
+      // Photo insert failure shouldn't block marking the job done.
+    }
   }
 
-  await supabase
+  const { error: updateErr } = await supabase
     .from("jobs")
     .update({
       status: "done",
@@ -314,6 +329,10 @@ export async function completeJob(formData: FormData): Promise<void> {
       filament_grams: filamentGrams,
     })
     .eq("id", jobId);
+  if (updateErr) {
+    console.error("[completeJob] jobs update failed:", updateErr);
+    throw new Error(`Could not mark done: ${updateErr.message}`);
+  }
 
   const owner = ownerFrom(job);
   if (job && owner && !actingOnOwnJob(job, admin.id)) {
