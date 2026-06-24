@@ -10,11 +10,15 @@ import {
 
 export const getUserUsage = cache(async (userId: string) => {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("weekly_usage")
     .select("week_start, total_grams, total_minutes, job_count")
     .eq("user_id", userId)
     .order("week_start", { ascending: false });
+
+  if (error) {
+    console.error("[getUserUsage] query failed:", error);
+  }
 
   const rows = (data ?? []) as {
     week_start: string;
@@ -78,15 +82,20 @@ function unwrap(rel: ProfileRel | ProfileRel[] | null): ProfileRel | null {
 
 export const getAllUsersUsage = cache(async (): Promise<UserUsageRow[]> => {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("weekly_usage")
     .select(
       `
       user_id, week_start, total_grams, total_minutes, job_count, updated_at,
-      profile:profiles!weekly_usage_user_id_fkey(name, email, role)
+      profile:profiles!user_id(name, email, role)
     `,
     )
     .order("week_start", { ascending: false });
+
+  if (error) {
+    console.error("[getAllUsersUsage] query failed:", error);
+    return [];
+  }
 
   const rows = (data ?? []) as AdminUsageRow[];
   const week = thisWeekStart();
