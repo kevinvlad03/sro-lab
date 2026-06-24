@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { AdminUsers } from "@/components/admin-users";
+import { getAllUsersUsage } from "@/lib/usage-server";
 
 type ProfileRow = {
   id: string;
@@ -54,5 +55,14 @@ export default async function AdminPage() {
       createdAt: r.created_at,
     }));
 
-  return <AdminUsers pending={pending} team={team} selfId={profile.id} />;
+  const usage = await getAllUsersUsage();
+
+  return (
+    <AdminUsers
+      pending={pending}
+      team={team}
+      selfId={profile.id}
+      usage={usage}
+    />
+  );
 }

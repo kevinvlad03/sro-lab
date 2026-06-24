@@ -32,6 +32,7 @@ import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
 export type JobCardProps = {
   id: string;
   title: string;
+  description: string | null;
   ownerName: string;
   status: JobStatus;
   visibility: JobVisibility;
@@ -116,6 +117,7 @@ export function JobCard(props: JobCardProps) {
   const {
     id,
     title,
+    description,
     ownerName,
     status,
     visibility,
@@ -284,6 +286,12 @@ export function JobCard(props: JobCardProps) {
             </div>
           )}
 
+          {isAdmin && description && (
+            <p className="mt-3 rounded-xl border border-border bg-background px-3 py-2 text-xs italic leading-relaxed text-muted">
+              &ldquo;{description}&rdquo;
+            </p>
+          )}
+
           {showAdminRow && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
               {status === "queued" && (
@@ -393,27 +401,57 @@ export function JobCard(props: JobCardProps) {
                 transition={transitions.smooth}
                 className="overflow-hidden"
               >
-                <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-border bg-background p-3">
-                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                    Finished-print photo (optional)
-                  </label>
-                  <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-dashed border-border bg-surface px-3 py-2.5 text-xs text-muted transition-colors hover:border-bambu-500/40 hover:text-foreground">
-                    <Camera className="h-4 w-4" />
-                    <span className="flex-1 truncate">
-                      {donePhoto ? donePhoto.name : "Add a photo (JPEG / PNG / WebP, max 10 MB)"}
-                    </span>
-                    {donePhoto && (
-                      <span className="text-[11px] text-bambu-600 dark:text-bambu-400">
-                        ready
+                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-background p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                        Time (minutes)
                       </span>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      onChange={(e) => setDonePhoto(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
+                      <input
+                        type="number"
+                        name="print_minutes"
+                        min={0}
+                        placeholder="e.g. 120"
+                        className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                        Filament (g)
+                      </span>
+                      <input
+                        type="number"
+                        name="filament_grams"
+                        min={0}
+                        placeholder="e.g. 28"
+                        className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium uppercase tracking-wider text-muted">
+                      Finished-print photo (optional)
+                    </span>
+                    <label className="group mt-1 flex cursor-pointer items-center gap-2.5 rounded-lg border border-dashed border-border bg-surface px-3 py-2.5 text-xs text-muted transition-colors hover:border-bambu-500/40 hover:text-foreground">
+                      <Camera className="h-4 w-4" />
+                      <span className="flex-1 truncate">
+                        {donePhoto ? donePhoto.name : "Add a photo (JPEG / PNG / WebP, max 10 MB)"}
+                      </span>
+                      {donePhoto && (
+                        <span className="text-[11px] text-bambu-600 dark:text-bambu-400">
+                          ready
+                        </span>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(e) => setDonePhoto(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                  </div>
+
                   {doneError && (
                     <p className="rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-1.5 text-[11px] text-red-700 dark:text-red-300">
                       {doneError}

@@ -8,6 +8,7 @@ import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
 type JobRow = {
   id: string;
   title: string;
+  description: string | null;
   owner_id: string;
   color: string | null;
   material: string | null;
@@ -39,6 +40,10 @@ function toCardProps(
   return {
     id: job.id,
     title: job.title,
+    // Strip description for non-admins so it never even reaches the client
+    // bundle. The field is fetched for everyone server-side because RLS
+    // doesn't differentiate by column, but only admins see the value.
+    description: isAdmin ? job.description : null,
     ownerName: ownerNameOf(job.owner),
     status: job.status,
     visibility: job.visibility,
@@ -72,7 +77,7 @@ export default async function Home() {
     .from("jobs")
     .select(
       `
-      id, title, owner_id, color, material, infill, quantity,
+      id, title, description, owner_id, color, material, infill, quantity,
       visibility, settings_mode, status, priority, created_at,
       file_path, source_url, thumbnail_url,
       owner:profiles!jobs_owner_id_fkey(name)

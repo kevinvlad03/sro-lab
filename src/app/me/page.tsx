@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { MeHistory, type MeJob } from "@/components/me-history";
+import { UsageStats } from "@/components/usage-stats";
+import { getUserUsage } from "@/lib/usage-server";
 import { photoUrl } from "@/lib/photos";
 import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
 
@@ -49,6 +51,8 @@ export default async function MePage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
 
+  const usage = await getUserUsage(profile.id);
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("jobs")
@@ -87,5 +91,12 @@ export default async function MePage() {
     )
     .map(toMe);
 
-  return <MeHistory active={active} completed={completed} other={other} />;
+  return (
+    <MeHistory
+      active={active}
+      completed={completed}
+      other={other}
+      usage={usage}
+    />
+  );
 }

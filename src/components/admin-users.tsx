@@ -15,8 +15,10 @@ import {
   promoteToAdmin,
   revokeAccess,
 } from "@/lib/admin-actions";
+import { AdminUsage } from "@/components/admin-usage";
 import { fadeUp, stagger, transitions } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import type { UserUsageRow } from "@/lib/usage";
 
 type Row = {
   id: string;
@@ -178,10 +180,12 @@ export function AdminUsers({
   pending,
   team,
   selfId,
+  usage,
 }: {
   pending: Row[];
   team: Row[];
   selfId: string;
+  usage?: UserUsageRow[];
 }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-12">
@@ -244,6 +248,8 @@ export function AdminUsers({
           </AnimatePresence>
         </motion.div>
       </section>
+
+      {usage && <AdminUsage rows={usage} />}
     </div>
   );
 }

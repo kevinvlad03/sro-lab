@@ -294,6 +294,9 @@ export async function completeJob(formData: FormData): Promise<void> {
     ? photoPathRaw
     : null;
 
+  const printMinutes = clampInt(formData.get("print_minutes"), 0, 100000);
+  const filamentGrams = clampInt(formData.get("filament_grams"), 0, 100000);
+
   if (photoPath) {
     await supabase.from("job_photos").insert({
       job_id: jobId,
@@ -307,6 +310,8 @@ export async function completeJob(formData: FormData): Promise<void> {
     .update({
       status: "done",
       completed_at: new Date().toISOString(),
+      print_minutes: printMinutes,
+      filament_grams: filamentGrams,
     })
     .eq("id", jobId);
 

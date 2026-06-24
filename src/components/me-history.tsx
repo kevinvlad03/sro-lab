@@ -11,7 +11,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
+import { UsageStats } from "@/components/usage-stats";
 import { fadeUp, stagger, transitions } from "@/lib/motion";
+import type { UsageTotals, WeeklyRow } from "@/lib/usage";
 import type { JobStatus, JobVisibility, SettingsMode } from "@/lib/types";
 
 export type MeJob = {
@@ -173,10 +175,16 @@ export function MeHistory({
   active,
   completed,
   other,
+  usage,
 }: {
   active: MeJob[];
   completed: MeJob[];
   other: MeJob[];
+  usage?: {
+    thisWeek: UsageTotals;
+    lifetime: UsageTotals;
+    weeks: WeeklyRow[];
+  };
 }) {
   const empty =
     active.length === 0 && completed.length === 0 && other.length === 0;
@@ -203,6 +211,14 @@ export function MeHistory({
           <ArrowRight className="h-4 w-4 transition-transform duration-500 group-hover:translate-x-0.5" />
         </Link>
       </motion.div>
+
+      {usage && (
+        <UsageStats
+          thisWeek={usage.thisWeek}
+          lifetime={usage.lifetime}
+          weeks={usage.weeks}
+        />
+      )}
 
       {empty ? (
         <motion.div
