@@ -72,7 +72,7 @@ security definer
 set search_path = public
 as $$
 declare
-  week_start date;
+  wk_start date;
   delta_grams int;
   delta_minutes int;
   delta_count int := 0;
@@ -83,7 +83,7 @@ begin
     return new;
   end if;
 
-  week_start := date_trunc('week', new.completed_at)::date;
+  wk_start := date_trunc('week', new.completed_at)::date;
 
   if old.status = 'done' then
     -- Existing done job whose stats are being edited. Apply deltas.
@@ -102,7 +102,7 @@ begin
   insert into public.weekly_usage (
     user_id, week_start, total_grams, total_minutes, job_count
   )
-  values (new.owner_id, week_start, delta_grams, delta_minutes, delta_count)
+  values (new.owner_id, wk_start, delta_grams, delta_minutes, delta_count)
   on conflict (user_id, week_start) do update
     set
       total_grams = weekly_usage.total_grams + excluded.total_grams,
