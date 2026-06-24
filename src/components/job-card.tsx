@@ -197,7 +197,12 @@ export function JobCard(props: JobCardProps) {
         }
       }
 
-      const formData = new FormData();
+      // Pull values from the form so print_minutes + filament_grams come
+      // along, then override the file-bearing fields with our pre-uploaded
+      // path (and clear the photo blob so the Server Action body stays
+      // tiny — the file is already in Storage).
+      const formData = new FormData(e.currentTarget);
+      formData.delete("photo");
       formData.set("job_id", id);
       if (uploadedPath) formData.set("photo_path", uploadedPath);
       await completeJob(formData);
