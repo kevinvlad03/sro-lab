@@ -92,6 +92,12 @@ export function SubmitForm() {
     if (pending) return;
     setError(null);
 
+    // Capture the form element synchronously. After any await below,
+    // React nullifies e.currentTarget, which would make `new
+    // FormData(e.currentTarget)` throw "Failed to construct FormData:
+    // parameter 1 is not of type HTMLFormElement".
+    const form = e.currentTarget;
+
     if (mode === "file") {
       if (!file) {
         setError("Drop in a file or switch to the link tab.");
@@ -151,7 +157,6 @@ export function SubmitForm() {
         }
       }
 
-      const form = e.currentTarget;
       const formData = new FormData(form);
       if (uploadedPath) formData.set("file_path", uploadedPath);
 
