@@ -171,6 +171,23 @@ export function SubmitForm() {
       }
       // On success, submitJob redirects — no further work here.
     } catch (err) {
+      // submitJob calls redirect("/") on success, which Next.js
+      // implements by throwing a special error with a NEXT_REDIRECT
+      // digest. Don't intercept it: it has to bubble up to the
+      // framework so the navigation actually happens. If we caught it,
+      // the redirect never fires and the cleanup below would also wipe
+      // the freshly uploaded STL out from under the job we just
+      // created.
+      if (
+        err &&
+        typeof err === "object" &&
+        "digest" in err &&
+        typeof (err as { digest?: unknown }).digest === "string" &&
+        (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+      ) {
+        throw err;
+      }
+
       setError(err instanceof Error ? err.message : "Something went wrong.");
       if (uploadedPath) {
         await supabase.storage.from("prints").remove([uploadedPath]);
