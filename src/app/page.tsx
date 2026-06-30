@@ -37,13 +37,15 @@ function toCardProps(
   isAdmin: boolean,
   position?: number,
 ): JobCardProps {
+  const isOwner = job.owner_id === selfId;
   return {
     id: job.id,
     title: job.title,
-    // Strip description for non-admins so it never even reaches the client
-    // bundle. The field is fetched for everyone server-side because RLS
-    // doesn't differentiate by column, but only admins see the value.
-    description: isAdmin ? job.description : null,
+    // Strip description for everyone except the admin and the job's owner.
+    // RLS doesn't differentiate by column, so the value is fetched for all
+    // visible rows — we drop it before serialising into props for anyone
+    // who isn't allowed to see it.
+    description: isAdmin || isOwner ? job.description : null,
     ownerName: ownerNameOf(job.owner),
     status: job.status,
     visibility: job.visibility,
@@ -58,7 +60,7 @@ function toCardProps(
     thumbnailUrl: job.thumbnail_url,
     createdAt: job.created_at,
     position,
-    isOwn: job.owner_id === selfId,
+    isOwn: isOwner,
     isAdmin,
   };
 }

@@ -13,8 +13,10 @@ import {
   EyeOff,
   FileBox,
   Link as LinkIcon,
+  Pencil,
   Play,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
@@ -22,6 +24,8 @@ import {
   advanceJobStatus,
   bumpJobPriority,
   completeJob,
+  deleteJob,
+  editJob,
   getJobDownloadUrl,
   rejectJob,
 } from "@/lib/jobs-actions";
@@ -142,7 +146,15 @@ export function JobCard(props: JobCardProps) {
   const [donePhoto, setDonePhoto] = useState<File | null>(null);
   const [donePending, setDonePending] = useState(false);
   const [doneError, setDoneError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSettingsMode, setEditSettingsMode] = useState<SettingsMode>(settingsMode);
+  const [editVisibility, setEditVisibility] = useState<JobVisibility>(visibility);
+  const [editInfill, setEditInfill] = useState<number>(infill ?? 20);
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const router = useRouter();
+
+  const showOwnerRow = isOwn && status === "queued";
 
   const VisIcon = visibility === "private" ? EyeOff : Eye;
   const canDownload = hasFile && (isOwn || isAdmin);
@@ -160,6 +172,27 @@ export function JobCard(props: JobCardProps) {
       : null;
 
   const showAdminRow = isAdmin && (status === "queued" || status === "printing");
+
+  async function onEditSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (editPending) return;
+    setEditError(null);
+    const form = e.currentTarget;
+    setEditPending(true);
+    try {
+      const formData = new FormData(form);
+      formData.set("job_id", id);
+      formData.set("settings_mode", editSettingsMode);
+      formData.set("visibility", editVisibility);
+      await editJob(formData);
+      setEditOpen(false);
+      setEditPending(false);
+      router.refresh();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Could not save.");
+      setEditPending(false);
+    }
+  }
 
   async function onConfirmDone(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -310,9 +343,37 @@ export function JobCard(props: JobCardProps) {
             </p>
           )}
 
-          {showAdminRow && (
+          {(showAdminRow || showOwnerRow) && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-              {status === "queued" && (
+              {showOwnerRow && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen((v) => !v)}
+                    className={cn(btn, btnGhost)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                  <form action={deleteJob}>
+                    <input type="hidden" name="job_id" value={id} />
+                    <button
+                      type="submit"
+                      className={cn(btn, btnDanger)}
+                      onClick={(e) => {
+                        if (!confirm(`Remove "${title}" from the queue?`)) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {showAdminRow && status === "queued" && (
                 <>
                   <form action={advanceJobStatus}>
                     <input type="hidden" name="job_id" value={id} />
@@ -347,7 +408,7 @@ export function JobCard(props: JobCardProps) {
                 </>
               )}
 
-              {status === "printing" && (
+              {showAdminRow && status === "printing" && (
                 <>
                   <button
                     type="button"
@@ -497,6 +558,215 @@ export function JobCard(props: JobCardProps) {
                       {donePending
                         ? donePhoto ? "Uploading..." : "Saving..."
                         : "Confirm done"}
+                    </button>
+                  </div>
+                </div>
+              </motion.form>
+            )}
+
+            {editOpen && status === "queued" && isOwn && (
+              <motion.form
+                key="edit-form"
+                onSubmit={onEditSubmit}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={transitions.smooth}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-background p-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                      Title
+                    </span>
+                    <input
+                      type="text"
+                      name="title"
+                      required
+                      maxLength={120}
+                      defaultValue={title}
+                      className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                      Description
+                    </span>
+                    <textarea
+                      name="description"
+                      rows={3}
+                      maxLength={1000}
+                      defaultValue={description ?? ""}
+                      placeholder="Anything the admin should know"
+                      className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                        Color
+                      </span>
+                      <input
+                        type="text"
+                        name="color"
+                        defaultValue={color ?? ""}
+                        maxLength={40}
+                        placeholder="any"
+                        className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                        Material
+                      </span>
+                      <select
+                        name="material"
+                        defaultValue={material ?? ""}
+                        className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                      >
+                        <option value="">No preference</option>
+                        <option value="PLA">PLA</option>
+                        <option value="PETG">PETG</option>
+                        <option value="ABS">ABS</option>
+                        <option value="TPU">TPU</option>
+                        <option value="Any">Any</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                        Quantity
+                      </span>
+                      <input
+                        type="number"
+                        name="quantity"
+                        min={1}
+                        max={100}
+                        defaultValue={quantity}
+                        className="h-9 rounded-lg border border-border bg-surface px-3 text-xs transition-colors focus:border-bambu-500 focus:outline-none focus:ring-2 focus:ring-bambu-500/20"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                      Settings
+                    </span>
+                    <div className="relative grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
+                      {(["creator", "custom"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setEditSettingsMode(m)}
+                          className={cn(
+                            "relative rounded-full px-3 py-1 text-[11px] font-medium transition-colors duration-300",
+                            editSettingsMode === m
+                              ? "text-foreground"
+                              : "text-muted hover:text-foreground",
+                          )}
+                        >
+                          {editSettingsMode === m && (
+                            <motion.span
+                              layoutId={`edit-settings-${id}`}
+                              className="absolute inset-0 rounded-full bg-bambu-500/10 ring-1 ring-bambu-500/30"
+                              transition={transitions.spring}
+                            />
+                          )}
+                          <span className="relative">
+                            {m === "creator" ? "Creator preset" : "Custom"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {editSettingsMode === "custom" && (
+                        <motion.label
+                          key="edit-infill"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={transitions.smooth}
+                          className="flex flex-col gap-1 overflow-hidden"
+                        >
+                          <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                            Infill <span className="text-foreground">{editInfill}%</span>
+                          </span>
+                          <input
+                            type="range"
+                            name="infill"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={editInfill}
+                            onChange={(e) => setEditInfill(Number(e.target.value))}
+                            className="h-8 accent-bambu-500"
+                          />
+                        </motion.label>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+                      Visibility
+                    </span>
+                    <div className="grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
+                      {(["team", "private"] as const).map((v) => {
+                        const Icon = v === "team" ? Eye : EyeOff;
+                        const label = v === "team" ? "Team" : "Private";
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setEditVisibility(v)}
+                            className={cn(
+                              "relative inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors duration-300",
+                              editVisibility === v
+                                ? "text-foreground"
+                                : "text-muted hover:text-foreground",
+                            )}
+                          >
+                            {editVisibility === v && (
+                              <motion.span
+                                layoutId={`edit-visibility-${id}`}
+                                className="absolute inset-0 rounded-full bg-bambu-500/10 ring-1 ring-bambu-500/30"
+                                transition={transitions.spring}
+                              />
+                            )}
+                            <Icon className="relative h-3 w-3" />
+                            <span className="relative">{label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {editError && (
+                    <p className="rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-1.5 text-[11px] text-red-700 dark:text-red-300">
+                      {editError}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditOpen(false);
+                        setEditError(null);
+                      }}
+                      disabled={editPending}
+                      className={cn(btn, btnGhost)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editPending}
+                      className={cn(btn, btnPrimary)}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {editPending ? "Saving..." : "Save changes"}
                     </button>
                   </div>
                 </div>

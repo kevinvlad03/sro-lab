@@ -353,6 +353,114 @@ export async function completeJob(formData: FormData): Promise<void> {
   revalidatePath("/gallery");
 }
 
+// --------------------------------------------------------------------
+// Owner actions — edit + delete on your own queued jobs
+// --------------------------------------------------------------------
+
+export async function editJob(formData: FormData): Promise<void> {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Not signed in.");
+
+  const jobId = String(formData.get("job_id") ?? "");
+  if (!jobId) return;
+
+  const supabase = await createClient();
+  const { data: job, error: fetchErr } = await supabase
+    .from("jobs")
+    .select("owner_id, status")
+    .eq("id", jobId)
+    .single();
+
+  if (fetchErr || !job) {
+    throw new Error("Job not found.");
+  }
+  if (job.owner_id !== profile.id) {
+    throw new Error("Only the owner can edit this print.");
+  }
+  if (job.status !== "queued") {
+    throw new Error("Once a print starts, it can't be edited.");
+  }
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const settingsMode =
+    formData.get("settings_mode") === "custom" ? "custom" : "creator";
+  const color = String(formData.get("color") ?? "").trim() || null;
+  const material =
+    settingsMode === "custom"
+      ? String(formData.get("material") ?? "").trim() || null
+      : null;
+  const infill =
+    settingsMode === "custom" ? clampInt(formData.get("infill"), 0, 100) : null;
+  const quantity = clampInt(formData.get("quantity"), 1, 100) ?? 1;
+  const visibility =
+    formData.get("visibility") === "private" ? "private" : "team";
+
+  if (!title) throw new Error("Title can't be empty.");
+  if (title.length > 120) throw new Error("Title is too long (max 120 chars).");
+  if (description.length > 1000) {
+    throw new Error("Description is too long (max 1000 chars).");
+  }
+
+  const { error: updateErr } = await supabase
+    .from("jobs")
+    .update({
+      title,
+      description,
+      color,
+      material,
+      infill,
+      quantity,
+      visibility,
+      settings_mode: settingsMode,
+    })
+    .eq("id", jobId);
+
+  if (updateErr) {
+    console.error("[editJob] update failed:", updateErr);
+    throw new Error(`Could not save changes: ${updateErr.message}`);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/me");
+}
+
+export async function deleteJob(formData: FormData): Promise<void> {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Not signed in.");
+
+  const jobId = String(formData.get("job_id") ?? "");
+  if (!jobId) return;
+
+  const supabase = await createClient();
+  const { data: job, error: fetchErr } = await supabase
+    .from("jobs")
+    .select("owner_id, status, file_path")
+    .eq("id", jobId)
+    .single();
+
+  if (fetchErr || !job) return;
+  if (job.owner_id !== profile.id) {
+    throw new Error("Only the owner can delete this print.");
+  }
+  if (job.status !== "queued") {
+    throw new Error("Once a print starts, it can't be deleted.");
+  }
+
+  const { error: delErr } = await supabase.from("jobs").delete().eq("id", jobId);
+  if (delErr) {
+    console.error("[deleteJob] delete failed:", delErr);
+    throw new Error(`Could not delete: ${delErr.message}`);
+  }
+
+  if (job.file_path) {
+    await supabase.storage.from("prints").remove([job.file_path as string]);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/me");
+}
+
 export async function bumpJobPriority(formData: FormData): Promise<void> {
   await requireAdmin();
   const jobId = String(formData.get("job_id") ?? "");
